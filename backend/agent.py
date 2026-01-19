@@ -41,20 +41,19 @@ client = AsyncOpenAI(
 # --- Tools ---
 
 def fetch_policy_text(url: str) -> str:
-    """Downloads and extracts text from a given URL with browser headers."""
+    """Downloads and extracts text using Jina Reader to bypass bot protection."""
     try:
-        # User-Agent to mimic a real browser
-        headers = {
-            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36"
-        }
-        downloaded = trafilatura.fetch_url(url) # trafilatura handles some headers, but explicit check or requests might be better if this fails.
-        # Note: trafilatura.fetch_url uses requests under the hood. 
-        # For deeper customization we might use requests directly, but let's try standard first.
+        # Use Jina Reader as a proxy to handle JS rendering and anti-bot checks
+        jina_url = f"https://r.jina.ai/{url}"
+        
+        # trafilatura.fetch_url handles the HTTP request cleanly
+        downloaded = trafilatura.fetch_url(jina_url)
         
         if not downloaded:
              return "" 
-        text = trafilatura.extract(downloaded)
-        return text[:20000] if text else ""
+        
+        # Jina returns clean Markdown/Text. We assume it's good to go.
+        return downloaded[:50000] # Increased limit as Jina is efficient
     except Exception:
         return ""
 
