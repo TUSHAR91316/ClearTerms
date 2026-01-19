@@ -32,30 +32,47 @@ class PolicyAnalysis(BaseModel):
 client = AsyncOpenAI(
     base_url="https://openrouter.ai/api/v1",
     api_key=os.getenv("OPENROUTER_API_KEY"),
+    default_headers={
+        "HTTP-Referer": "http://localhost:3000", # Or your deployed URL
+        "X-Title": "ClearTerms",
+    }
 )
 
 # --- Tools ---
 
 def fetch_policy_text(url: str) -> str:
-    """Downloads and extracts text from a given URL."""
+    """Downloads and extracts text from a given URL with browser headers."""
     try:
-        downloaded = trafilatura.fetch_url(url)
+        # User-Agent to mimic a real browser
+        headers = {
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36"
+        }
+        downloaded = trafilatura.fetch_url(url) # trafilatura handles some headers, but explicit check or requests might be better if this fails.
+        # Note: trafilatura.fetch_url uses requests under the hood. 
+        # For deeper customization we might use requests directly, but let's try standard first.
+        
         if not downloaded:
-            # Fallback for some sites, maybe mock or error
-            return "" 
+             return "" 
         text = trafilatura.extract(downloaded)
         return text[:20000] if text else ""
     except Exception:
         return ""
 
-async def analyze_policy(url: str) -> PolicyAnalysis:
-    text = fetch_policy_text(url)
+async def analyze_policy(url: str, text: Optional[str] = None) -> PolicyAnalysis:
+    """
+    Analyzes policy. If 'text' is provided, it uses that. 
+    Otherwise it attempts to fetch from 'url'.
+    """
+    policy_text = text
     
-    if not text:
-         # Return a dummy error analysis if fetch fails
+    if not policy_text and url:
+        policy_text = fetch_policy_text(url)
+    
+    if not policy_text:
+         # Return a dummy error analysis if fetch fails and no text provided
         return PolicyAnalysis(
             transparency_score=0,
-            summary=f"Could not fetch content from {url}. Please check the link.",
+            summary=f"Could not fetch content from {url or 'input'}. Please check the link or paste text manually.",
             risk_flags=[],
             user_rights=[],
             verdict="Error"
@@ -63,7 +80,7 @@ async def analyze_policy(url: str) -> PolicyAnalysis:
 
     # Use OpenAI's beta parse feature which uses Pydantic models under the hood
     completion = await client.beta.chat.completions.parse(
-        model="google/gemini-2.0-flash-exp:free", # Or any other capable model
+        model="google/gemini-2.0-flash-exp:free", 
         messages=[
             {"role": "system", "content": (
                 "You are a legal expert and privacy advocate. Your goal is to analyze "
@@ -71,7 +88,7 @@ async def analyze_policy(url: str) -> PolicyAnalysis:
                 "Identify predatory clauses, data selling, and vague language."
                 "Be critical but fair."
             )},
-            {"role": "user", "content": f"Analyze the following policy text: \n\n{text}"},
+            {"role": "user", "content": f"Analyze the following policy text: \n\n{policy_text}"},
         ],
         response_format=PolicyAnalysis,
     )

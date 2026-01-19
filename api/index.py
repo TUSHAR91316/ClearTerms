@@ -7,6 +7,7 @@ app = FastAPI()
 
 class AnalyzeRequest(BaseModel):
     url: str
+    text: str | None = None
 
 @app.post("/api/analyze", response_model=PolicyAnalysis)
 async def analyze_endpoint(request: AnalyzeRequest):
@@ -21,7 +22,7 @@ async def analyze_endpoint(request: AnalyzeRequest):
              # For local test, we assume it's set in .env
              pass
 
-        result = await analyze_policy(request.url)
+        result = await analyze_policy(request.url, request.text)
         return result
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
