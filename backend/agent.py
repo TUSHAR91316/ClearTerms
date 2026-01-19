@@ -1,0 +1,79 @@
+import os
+from typing import List, Optional
+from pydantic import BaseModel, Field
+from openai import AsyncOpenAI
+import trafilatura
+from dotenv import load_dotenv
+
+load_dotenv()
+
+# --- Pydantic Models ---
+
+class RiskFlag(BaseModel):
+    category: str = Field(description="Category of the risk (e.g., 'Data Selling', 'Tracking', 'IP Ownership')")
+    severity: str = Field(description="Severity level: 'High', 'Medium', 'Low'")
+    description: str = Field(description="Brief explanation of the risk found in the text.")
+
+class UserRight(BaseModel):
+    right: str = Field(description="Name of the right (e.g., 'Right to deletion')")
+    details: str = Field(description="How the user can exercise this right.")
+
+class PolicyAnalysis(BaseModel):
+    transparency_score: int = Field(description="Score from 0-100 indicating how transparent and user-friendly the policy is.")
+    summary: str = Field(description="A concise summary of the policy in plain English.")
+    risk_flags: List[RiskFlag] = Field(description="List of potential red flags or aggressive terms.")
+    user_rights: List[UserRight] = Field(description="List of rights the user has.")
+    verdict: str = Field(description="Overall verdict: 'Safe', 'Caution', or 'Unsafe'.")
+
+# --- Agent Setup ---
+
+# Fallback to OpenAI direct client due to pydantic-ai installation issues on Python 3.13
+# OpenRouter is OpenAI compatible.
+client = AsyncOpenAI(
+    base_url="https://openrouter.ai/api/v1",
+    api_key=os.getenv("OPENROUTER_API_KEY"),
+)
+
+# --- Tools ---
+
+def fetch_policy_text(url: str) -> str:
+    """Downloads and extracts text from a given URL."""
+    try:
+        downloaded = trafilatura.fetch_url(url)
+        if not downloaded:
+            # Fallback for some sites, maybe mock or error
+            return "" 
+        text = trafilatura.extract(downloaded)
+        return text[:20000] if text else ""
+    except Exception:
+        return ""
+
+async def analyze_policy(url: str) -> PolicyAnalysis:
+    text = fetch_policy_text(url)
+    
+    if not text:
+         # Return a dummy error analysis if fetch fails
+        return PolicyAnalysis(
+            transparency_score=0,
+            summary=f"Could not fetch content from {url}. Please check the link.",
+            risk_flags=[],
+            user_rights=[],
+            verdict="Error"
+        )
+
+    # Use OpenAI's beta parse feature which uses Pydantic models under the hood
+    completion = await client.beta.chat.completions.parse(
+        model="google/gemini-2.0-flash-exp:free", # Or any other capable model
+        messages=[
+            {"role": "system", "content": (
+                "You are a legal expert and privacy advocate. Your goal is to analyze "
+                "Terms of Service and Privacy Policies to protect the user."
+                "Identify predatory clauses, data selling, and vague language."
+                "Be critical but fair."
+            )},
+            {"role": "user", "content": f"Analyze the following policy text: \n\n{text}"},
+        ],
+        response_format=PolicyAnalysis,
+    )
+
+    return completion.choices[0].message.parsed

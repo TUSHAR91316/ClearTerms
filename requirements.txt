@@ -1,0 +1,7 @@
+pydantic-ai
+fastapi
+uvicorn
+trafilatura
+beautifulsoup4
+python-dotenv
+openai
