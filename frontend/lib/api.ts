@@ -23,7 +23,7 @@ export interface PolicyAnalysis {
     verdict: string;
 }
 
-export const analyzePolicy = async (url: string): Promise<PolicyAnalysis> => {
-    const response = await api.post<PolicyAnalysis>('/analyze', { url });
+export const analyzePolicy = async (url: string, text?: string): Promise<PolicyAnalysis> => {
+    const response = await api.post<PolicyAnalysis>('/analyze', { url, text });
     return response.data;
 };

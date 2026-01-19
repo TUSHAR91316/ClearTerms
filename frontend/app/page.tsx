@@ -7,23 +7,32 @@ import { cn } from "@/lib/utils";
 import { ShieldCheck, AlertTriangle, FileText, Search, Loader2 } from "lucide-react";
 
 export default function Home() {
+    const [mode, setMode] = useState<"url" | "text">("url");
     const [url, setUrl] = useState("");
+    const [text, setText] = useState("");
     const [loading, setLoading] = useState(false);
     const [result, setResult] = useState<PolicyAnalysis | null>(null);
     const [error, setError] = useState("");
 
     const handleAnalyze = async (e: React.FormEvent) => {
         e.preventDefault();
-        if (!url) return;
+        if (mode === "url" && !url) return;
+        if (mode === "text" && !text) return;
+
         setLoading(true);
         setError("");
         setResult(null);
 
         try {
-            const data = await analyzePolicy(url);
+            // Pass both, let api/backend helper decide based on what's present or add logic here
+            // Our API client signature is (url, text?), but we should just pass empty string for url if text mode
+            const targetUrl = mode === "url" ? url : "";
+            const targetText = mode === "text" ? text : undefined;
+
+            const data = await analyzePolicy(targetUrl, targetText);
             setResult(data);
         } catch (err: any) {
-            setError(err?.response?.data?.detail || "Failed to analyze policy. Please check the URL.");
+            setError(err?.response?.data?.detail || "Failed to analyze policy. Please check input.");
         } finally {
             setLoading(false);
         }
@@ -54,33 +63,76 @@ export default function Home() {
                         Decode Privacy Policies
                     </h1>
                     <p className="text-lg text-gray-400 max-w-xl mx-auto">
-                        Paste a URL to instantly spot hidden risks, data selling clauses, and user rights.
+                        Analyze any Privacy Policy or Terms of Service instantly.
                     </p>
                 </div>
 
-                {/* Search Input */}
-                <form onSubmit={handleAnalyze} className="relative w-full max-w-xl mx-auto">
-                    <div className="relative group">
-                        <div className="absolute -inset-0.5 bg-gradient-to-r from-blue-500 to-purple-600 rounded-xl blur opacity-30 group-hover:opacity-60 transition duration-500"></div>
-                        <div className="relative flex items-center bg-black/50 backdrop-blur-xl rounded-xl border border-white/10 p-2">
-                            <input
-                                type="url"
-                                placeholder="https://example.com/privacy-policy"
-                                value={url}
-                                onChange={(e) => setUrl(e.target.value)}
-                                className="w-full bg-transparent border-none outline-none text-white placeholder-gray-500 px-4 py-3"
-                                required
-                            />
-                            <button
-                                type="submit"
-                                disabled={loading}
-                                className="bg-white/10 hover:bg-white/20 text-white p-3 rounded-lg transition-all disabled:opacity-50 disabled:cursor-not-allowed"
-                            >
-                                {loading ? <Loader2 className="w-5 h-5 animate-spin" /> : <Search className="w-5 h-5" />}
-                            </button>
-                        </div>
+                {/* Input Section */}
+                <div className="w-full max-w-xl mx-auto space-y-4">
+
+                    {/* Tabs */}
+                    <div className="flex bg-white/5 p-1 rounded-xl border border-white/10 w-fit mx-auto backdrop-blur-md">
+                        <button
+                            onClick={() => setMode("url")}
+                            className={cn("px-4 py-2 rounded-lg text-sm font-medium transition-all", mode === "url" ? "bg-blue-600 text-white shadow-lg" : "text-gray-400 hover:text-white")}
+                        >
+                            Analyze URL
+                        </button>
+                        <button
+                            onClick={() => setMode("text")}
+                            className={cn("px-4 py-2 rounded-lg text-sm font-medium transition-all", mode === "text" ? "bg-blue-600 text-white shadow-lg" : "text-gray-400 hover:text-white")}
+                        >
+                            Paste Text
+                        </button>
                     </div>
-                </form>
+
+                    <form onSubmit={handleAnalyze} className="relative w-full">
+                        <div className="relative group">
+                            <div className="absolute -inset-0.5 bg-gradient-to-r from-blue-500 to-purple-600 rounded-xl blur opacity-30 group-hover:opacity-60 transition duration-500"></div>
+
+                            {mode === "url" ? (
+                                <div className="relative flex items-center bg-black/50 backdrop-blur-xl rounded-xl border border-white/10 p-2">
+                                    <input
+                                        type="url"
+                                        placeholder="https://example.com/privacy-policy"
+                                        value={url}
+                                        onChange={(e) => setUrl(e.target.value)}
+                                        className="w-full bg-transparent border-none outline-none text-white placeholder-gray-500 px-4 py-3"
+                                        required
+                                    />
+                                    <button
+                                        type="submit"
+                                        disabled={loading}
+                                        className="bg-white/10 hover:bg-white/20 text-white p-3 rounded-lg transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                                    >
+                                        {loading ? <Loader2 className="w-5 h-5 animate-spin" /> : <Search className="w-5 h-5" />}
+                                    </button>
+                                </div>
+                            ) : (
+                                <div className="relative bg-black/50 backdrop-blur-xl rounded-xl border border-white/10 p-2 flex flex-col">
+                                    <textarea
+                                        placeholder="Paste the policy text here..."
+                                        value={text}
+                                        onChange={(e) => setText(e.target.value)}
+                                        className="w-full bg-transparent border-none outline-none text-white placeholder-gray-500 px-4 py-3 min-h-[150px] resize-none focus:ring-0"
+                                        required
+                                    />
+                                    <div className="flex justify-end p-2 border-t border-white/5">
+                                        <button
+                                            type="submit"
+                                            disabled={loading}
+                                            className="bg-white/10 hover:bg-white/20 text-white px-6 py-2 rounded-lg transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center"
+                                        >
+                                            {loading ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : <Search className="w-4 h-4 mr-2" />}
+                                            Analyze Text
+                                        </button>
+                                    </div>
+                                </div>
+                            )}
+
+                        </div>
+                    </form>
+                </div>
 
                 {/* Error State */}
                 <AnimatePresence>

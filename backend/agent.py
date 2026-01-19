@@ -80,7 +80,7 @@ async def analyze_policy(url: str, text: Optional[str] = None) -> PolicyAnalysis
 
     # Use OpenAI's beta parse feature which uses Pydantic models under the hood
     completion = await client.beta.chat.completions.parse(
-        model="google/gemini-2.0-flash-exp:free", 
+        model="xiaomi/mimo-v2-flash", 
         messages=[
             {"role": "system", "content": (
                 "You are a legal expert and privacy advocate. Your goal is to analyze "
