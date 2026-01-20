@@ -41,21 +41,40 @@ client = AsyncOpenAI(
 # --- Tools ---
 
 def fetch_policy_text(url: str) -> str:
-    """Downloads and extracts text using Jina Reader to bypass bot protection."""
+    """
+    Downloads and extracts text. Tries JReader first, then falls back to direct fetch.
+    """
+    headers = {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+    }
+
+    # Strategy 1: Jina Reader (good for JS-heavy sites)
     try:
-        # Use Jina Reader as a proxy to handle JS rendering and anti-bot checks
         jina_url = f"https://r.jina.ai/{url}"
-        
-        # trafilatura.fetch_url handles the HTTP request cleanly
         downloaded = trafilatura.fetch_url(jina_url)
-        
-        if not downloaded:
-             return "" 
-        
-        # Jina returns clean Markdown/Text. We assume it's good to go.
-        return downloaded[:50000] # Increased limit as Jina is efficient
+        if downloaded and len(downloaded) > 200 and "Access Denied" not in downloaded:
+            return downloaded[:50000]
     except Exception:
-        return ""
+        pass
+
+    # Strategy 2: Direct Trafilatura Fetch with Headers
+    try:
+        downloaded = trafilatura.fetch_url(url) # trafilatura uses its own user-agent by default, we can rely on its robustness or pass config
+        if not downloaded:
+             # Try forcing requests logic if trafilatura default fails
+             import requests
+             response = requests.get(url, headers=headers, timeout=10)
+             if response.status_code == 200:
+                 downloaded = response.text
+
+        if downloaded:
+            extracted = trafilatura.extract(downloaded)
+            if extracted:
+                return extracted[:50000]
+    except Exception:
+        pass
+    
+    return ""
 
 async def analyze_policy(url: str, text: Optional[str] = None) -> PolicyAnalysis:
     """
