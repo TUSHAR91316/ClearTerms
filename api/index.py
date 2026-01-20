@@ -18,9 +18,7 @@ async def analyze_endpoint(request: AnalyzeRequest):
         
         # Ensure API Key is present for the agent
         if not os.getenv("OPENROUTER_API_KEY"):
-             # Fallback or error if not set. 
-             # For local test, we assume it's set in .env
-             pass
+             raise HTTPException(status_code=500, detail="OPENROUTER_API_KEY is not set in environment variables.")
 
         result = await analyze_policy(request.url, request.text)
         return result

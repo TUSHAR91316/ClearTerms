@@ -97,18 +97,26 @@ async def analyze_policy(url: str, text: Optional[str] = None) -> PolicyAnalysis
         )
 
     # Use OpenAI's beta parse feature which uses Pydantic models under the hood
-    completion = await client.beta.chat.completions.parse(
-        model="xiaomi/mimo-v2-flash", 
-        messages=[
-            {"role": "system", "content": (
-                "You are a legal expert and privacy advocate. Your goal is to analyze "
-                "Terms of Service and Privacy Policies to protect the user."
-                "Identify predatory clauses, data selling, and vague language."
-                "Be critical but fair."
-            )},
-            {"role": "user", "content": f"Analyze the following policy text: \n\n{policy_text}"},
-        ],
-        response_format=PolicyAnalysis,
-    )
-
-    return completion.choices[0].message.parsed
+    try:
+        completion = await client.beta.chat.completions.parse(
+            model="xiaomi/mimo-v2-flash", 
+            messages=[
+                {"role": "system", "content": (
+                    "You are a legal expert and privacy advocate. Your goal is to analyze "
+                    "Terms of Service and Privacy Policies to protect the user."
+                    "Identify predatory clauses, data selling, and vague language."
+                    "Be critical but fair."
+                )},
+                {"role": "user", "content": f"Analyze the following policy text: \n\n{policy_text}"},
+            ],
+            response_format=PolicyAnalysis,
+        )
+        return completion.choices[0].message.parsed
+    except Exception as e:
+        return PolicyAnalysis(
+            transparency_score=0,
+            summary=f"AI Analysis Failed: {str(e)}. Please check your API Key or try again later.",
+            risk_flags=[],
+            user_rights=[],
+            verdict="Error"
+        )
