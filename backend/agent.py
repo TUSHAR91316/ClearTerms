@@ -110,24 +110,40 @@ async def analyze_policy(url: str, text: Optional[str] = None) -> PolicyAnalysis
             }
         )
 
-        completion = await client.beta.chat.completions.parse(
-            model="google/gemini-2.0-flash-001", 
-            messages=[
-                {"role": "system", "content": (
-                    "You are a legal expert and privacy advocate. Your goal is to analyze "
-                    "Terms of Service and Privacy Policies to protect the user."
-                    "Identify predatory clauses, data selling, and vague language."
-                    "Be critical but fair."
-                )},
-                {"role": "user", "content": f"Analyze the following policy text: \n\n{policy_text}"},
-            ],
-            response_format=PolicyAnalysis,
-        )
-        return completion.choices[0].message.parsed
-    except Exception as e:
+        models_to_try = [
+            "google/gemini-2.0-flash-001",
+            "openai/gpt-4o-mini",
+            "meta-llama/llama-3.1-70b-instruct"
+        ]
+
+        last_error = None
+
+        for model in models_to_try:
+            try:
+                print(f"Attempting analysis with model: {model}")
+                completion = await client.beta.chat.completions.parse(
+                    model=model, 
+                    messages=[
+                        {"role": "system", "content": (
+                            "You are a legal expert and privacy advocate. Your goal is to analyze "
+                            "Terms of Service and Privacy Policies to protect the user."
+                            "Identify predatory clauses, data selling, and vague language."
+                            "Be critical but fair."
+                        )},
+                        {"role": "user", "content": f"Analyze the following policy text: \n\n{policy_text}"},
+                    ],
+                    response_format=PolicyAnalysis,
+                )
+                return completion.choices[0].message.parsed
+            except Exception as e:
+                print(f"Model {model} failed: {e}")
+                last_error = e
+                continue
+
+        # If we get here, all models failed
         return PolicyAnalysis(
             transparency_score=0,
-            summary=f"AI Analysis Failed: {str(e)}. Please check your API Key or try again later.",
+            summary=f"All AI providers failed. Last error: {str(last_error)}. Please try again later.",
             risk_flags=[],
             user_rights=[],
             verdict="Error"
