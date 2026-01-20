@@ -27,16 +27,8 @@ class PolicyAnalysis(BaseModel):
 
 # --- Agent Setup ---
 
-# Fallback to OpenAI direct client due to pydantic-ai installation issues on Python 3.13
-# OpenRouter is OpenAI compatible.
-client = AsyncOpenAI(
-    base_url="https://openrouter.ai/api/v1",
-    api_key=os.getenv("OPENROUTER_API_KEY"),
-    default_headers={
-        "HTTP-Referer": "http://localhost:3000", # Or your deployed URL
-        "X-Title": "ClearTerms",
-    }
-)
+# Client initialization is moved inside the function to prevent import errors if API key is missing.
+
 
 # --- Tools ---
 
@@ -98,6 +90,26 @@ async def analyze_policy(url: str, text: Optional[str] = None) -> PolicyAnalysis
 
     # Use OpenAI's beta parse feature which uses Pydantic models under the hood
     try:
+        # Lazy initialization of client
+        api_key = os.getenv("OPENROUTER_API_KEY")
+        if not api_key:
+             return PolicyAnalysis(
+                transparency_score=0,
+                summary="Configuration Error: OPENROUTER_API_KEY is not set on the server.",
+                risk_flags=[],
+                user_rights=[],
+                verdict="Error"
+            )
+
+        client = AsyncOpenAI(
+            base_url="https://openrouter.ai/api/v1",
+            api_key=api_key,
+            default_headers={
+                "HTTP-Referer": "http://localhost:3000",
+                "X-Title": "ClearTerms",
+            }
+        )
+
         completion = await client.beta.chat.completions.parse(
             model="xiaomi/mimo-v2-flash", 
             messages=[
