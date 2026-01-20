@@ -12,6 +12,11 @@ export const metadata: Metadata = {
         title: "ClearTerms - Free Privacy Policy Analyzer",
         description: "Don't agree blindly. Use AI to scan agreements for risks and hidden clauses.",
         type: "website",
+    },
+    icons: {
+        icon: "/logo.svg",
+        shortcut: "/logo.svg",
+        apple: "/logo.svg",
     }
 };
 
