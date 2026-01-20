@@ -148,3 +148,11 @@ async def analyze_policy(url: str, text: Optional[str] = None) -> PolicyAnalysis
             user_rights=[],
             verdict="Error"
         )
+    except Exception as e:
+        return PolicyAnalysis(
+            transparency_score=0,
+            summary=f"Unexpected System Error: {str(e)}",
+            risk_flags=[],
+            user_rights=[],
+            verdict="Error"
+        )
