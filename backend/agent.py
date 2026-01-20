@@ -111,7 +111,7 @@ async def analyze_policy(url: str, text: Optional[str] = None) -> PolicyAnalysis
         )
 
         completion = await client.beta.chat.completions.parse(
-            model="xiaomi/mimo-v2-flash", 
+            model="google/gemini-2.0-flash-001", 
             messages=[
                 {"role": "system", "content": (
                     "You are a legal expert and privacy advocate. Your goal is to analyze "
