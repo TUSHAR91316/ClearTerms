@@ -1,7 +1,8 @@
 import os
 from typing import List, Optional
 from pydantic import BaseModel, Field
-from openai import AsyncOpenAI
+from huggingface_hub import AsyncInferenceClient
+import json
 import trafilatura
 from dotenv import load_dotenv
 
@@ -91,50 +92,61 @@ async def analyze_policy(url: str, text: Optional[str] = None) -> PolicyAnalysis
     # Use OpenAI's beta parse feature which uses Pydantic models under the hood
     try:
         # Lazy initialization of client
-        api_key = os.getenv("OPENROUTER_API_KEY")
+        api_key = os.getenv("HF_TOKEN")
         if not api_key:
              return PolicyAnalysis(
                 transparency_score=0,
-                summary="Configuration Error: OPENROUTER_API_KEY is not set on the server.",
+                summary="Configuration Error: HF_TOKEN is not set on the server.",
                 risk_flags=[],
                 user_rights=[],
                 verdict="Error"
             )
 
-        client = AsyncOpenAI(
-            base_url="https://openrouter.ai/api/v1",
-            api_key=api_key,
-            default_headers={
-                "HTTP-Referer": "http://localhost:3000",
-                "X-Title": "ClearTerms",
-            }
-        )
+        client = AsyncInferenceClient(token=api_key)
 
         models_to_try = [
-            "google/gemini-2.0-flash-001",
-            "openai/gpt-4o-mini",
-            "meta-llama/llama-3.1-70b-instruct"
+            "meta-llama/Llama-3.3-70B-Instruct",
+            "Qwen/Qwen2.5-72B-Instruct",
+            "mistralai/Mixtral-8x7B-Instruct-v0.1"
         ]
 
         last_error = None
 
+        prompt = (
+            "You are a legal expert and privacy advocate. Your goal is to analyze "
+            "Terms of Service and Privacy Policies to protect the user."
+            "Identify predatory clauses, data selling, and vague language."
+            "Be critical but fair.\n\n"
+            "Analyze the following policy text: \n\n"
+            f"{policy_text}\n\n"
+            "Respond in strictly valid JSON format matching this schema:\n"
+            f"{json.dumps(PolicyAnalysis.model_json_schema())}\n"
+            "Do not output anything other than JSON."
+        )
+
         for model in models_to_try:
             try:
                 print(f"Attempting analysis with model: {model}")
-                completion = await client.beta.chat.completions.parse(
-                    model=model, 
-                    messages=[
-                        {"role": "system", "content": (
-                            "You are a legal expert and privacy advocate. Your goal is to analyze "
-                            "Terms of Service and Privacy Policies to protect the user."
-                            "Identify predatory clauses, data selling, and vague language."
-                            "Be critical but fair."
-                        )},
-                        {"role": "user", "content": f"Analyze the following policy text: \n\n{policy_text}"},
-                    ],
-                    response_format=PolicyAnalysis,
+                completion = await client.chat_completion(
+                    model=model,
+                    messages=[{"role": "user", "content": prompt}],
+                    max_tokens=1000,
+                    response_format={"type": "json_object"}
                 )
-                return completion.choices[0].message.parsed
+                
+                content = completion.choices[0].message.content.strip()
+                
+                # Clean up markdown JSON block if present
+                if content.startswith("```json"):
+                    content = content[7:]
+                if content.endswith("```"):
+                    content = content[:-3]
+                content = content.strip()
+                
+                # Parse to Pydantic
+                parsed = PolicyAnalysis.model_validate_json(content)
+                return parsed
+
             except Exception as e:
                 print(f"Model {model} failed: {e}")
                 last_error = e

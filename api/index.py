@@ -17,8 +17,8 @@ async def analyze_endpoint(request: AnalyzeRequest):
         # For Vercel Serverless, 10-60s timeout usually applies.
         
         # Ensure API Key is present for the agent
-        if not os.getenv("OPENROUTER_API_KEY"):
-             raise HTTPException(status_code=500, detail="OPENROUTER_API_KEY is not set in environment variables.")
+        if not os.getenv("HF_TOKEN"):
+             raise HTTPException(status_code=500, detail="HF_TOKEN is not set in environment variables.")
 
         result = await analyze_policy(request.url, request.text)
         return result
