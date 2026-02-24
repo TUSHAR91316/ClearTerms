@@ -69,5 +69,6 @@ In a digital world where "I Agree" is the biggest lie, ClearTerms stands as your
 This project is optimized for [Vercel](https://vercel.com).
 1.  Push to GitHub.
 2.  Import project in Vercel.
-3.  Add `HF_TOKEN` in Environment Variables.
-4.  Deploy!
+3.  Go to the **Settings > Environment Variables** tab in your Vercel Dashboard.
+4.  Add `HF_TOKEN` in the Key field and your Hugging Face Access Token in the Value field.
+5.  Deploy! (If already deployed, click the three dots on the latest deployment and click **Redeploy** so it picks up the token).
