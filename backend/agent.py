@@ -4,6 +4,8 @@ from pydantic import BaseModel, Field
 from huggingface_hub import AsyncInferenceClient
 import json
 import trafilatura
+import asyncio
+import trafilatura
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -77,7 +79,7 @@ async def analyze_policy(url: str, text: Optional[str] = None) -> PolicyAnalysis
     policy_text = text
     
     if not policy_text and url:
-        policy_text = fetch_policy_text(url)
+        policy_text = await asyncio.to_thread(fetch_policy_text, url)
     
     if not policy_text:
          # Return a dummy error analysis if fetch fails and no text provided

@@ -26,7 +26,10 @@ In a digital world where "I Agree" is the biggest lie, ClearTerms stands as your
 -   **Transparency Score**: Assigns a simple 0-100 score to every policy.
 -   **Smart Fallback System**: Automatically rotates between Llama 3.3, Qwen 2.5, and Mixtral to guarantee results.
 -   **Anti-Bot Scraping**: Uses a hybrid scraper (Jina Reader + Headless Fallback) to read policies even from difficult sites like Zomato.
--   **Modern Tech Stack**: Built with Next.js 14, FastAPI (Python), and Tailwind CSS.
+-   **Performance Optimized**: 
+    - Fast Next.js rendering via App Router Server/Client Component splitting.
+    - High-concurrency FastAPI backend that offloads blocking HTTP scrapes to background threads.
+-   **Modern Tech Stack**: Built with Next.js 14, FastAPI (Python), and Tailwind CSS, featuring a responsive, premium Glassmorphism UI.
 
 ## 🛠️ Tech Stack
 -   **Frontend**: Next.js 14, TypeScript, Tailwind CSS, Framer Motion, Lucide React.

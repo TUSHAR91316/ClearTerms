@@ -1,4 +1,4 @@
-// File: F:\Project\popetai\frontend\app\layout.tsx
+// File: F:\Project\ClearTerms\frontend\app\layout.tsx
 import * as entry from '../../../app/layout.js'
 import type { ResolvingMetadata, ResolvingViewport } from 'next/dist/lib/metadata/types/metadata-interface.js'
 
