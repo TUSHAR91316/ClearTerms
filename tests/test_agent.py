@@ -22,25 +22,33 @@ from backend.agent import analyze_policy, PolicyAnalysis, RiskFlag, UserRight
 
 class TestPolicyAgent(unittest.IsolatedAsyncioTestCase):
 
+    def setUp(self):
+        # Set a mock HF_TOKEN so the agent doesn't abort with configuration error
+        self.env_patcher = patch.dict(os.environ, {"HF_TOKEN": "mock-hf-token"})
+        self.env_patcher.start()
+
+    def tearDown(self):
+        self.env_patcher.stop()
+
     @patch("backend.agent.trafilatura.fetch_url")
     @patch("backend.agent.trafilatura.extract")
-    @patch("backend.agent.client.beta.chat.completions.parse", new_callable=AsyncMock)
-    async def test_analyze_policy_success(self, mock_parse, mock_extract, mock_fetch):
+    @patch("backend.agent.get_hf_client")
+    async def test_analyze_policy_success(self, mock_get_client, mock_extract, mock_fetch):
         # Setup Mocks
         mock_fetch.return_value = "<html>Content</html>"
         mock_extract.return_value = "This is a privacy policy."
         
-        # Mock LLM Response
-        mock_response = MagicMock()
-        expected_result = PolicyAnalysis(
-            transparency_score=85,
-            summary="Good policy.",
-            risk_flags=[RiskFlag(category="None", severity="Low", description="None")],
-            user_rights=[UserRight(right="Access", details="Yes")],
-            verdict="Safe"
-        )
-        mock_response.choices = [MagicMock(message=MagicMock(parsed=expected_result))]
-        mock_parse.return_value = mock_response
+        # Mock client and its async chat_completion method
+        mock_client = MagicMock()
+        mock_chat_completion = AsyncMock()
+        
+        mock_completion = MagicMock()
+        mock_completion.choices = [
+            MagicMock(message=MagicMock(content='{"transparency_score": 85, "summary": "Good policy.", "risk_flags": [{"category": "None", "severity": "Low", "description": "None"}], "user_rights": [{"right": "Access", "details": "Yes"}], "verdict": "Safe"}'))
+        ]
+        mock_chat_completion.return_value = mock_completion
+        mock_client.chat_completion = mock_chat_completion
+        mock_get_client.return_value = mock_client
 
         # Run Test
         result = await analyze_policy("http://example.com")
@@ -49,7 +57,7 @@ class TestPolicyAgent(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(result.transparency_score, 85)
         self.assertEqual(result.verdict, "Safe")
         mock_fetch.assert_called_with("http://example.com")
-        mock_parse.assert_called_once()
+        mock_chat_completion.assert_called_once()
 
     @patch("backend.agent.trafilatura.fetch_url")
     async def test_analyze_policy_fetch_fail(self, mock_fetch):

@@ -3,9 +3,9 @@ from typing import List, Optional
 from pydantic import BaseModel, Field
 from huggingface_hub import AsyncInferenceClient
 import json
-import trafilatura
 import asyncio
 import trafilatura
+import requests
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -30,7 +30,16 @@ class PolicyAnalysis(BaseModel):
 
 # --- Agent Setup ---
 
-# Client initialization is moved inside the function to prevent import errors if API key is missing.
+_client: Optional[AsyncInferenceClient] = None
+
+def get_hf_client(api_key: str) -> AsyncInferenceClient:
+    """
+    Returns a cached global AsyncInferenceClient instance.
+    """
+    global _client
+    if _client is None:
+        _client = AsyncInferenceClient(token=api_key)
+    return _client
 
 
 # --- Tools ---
@@ -57,7 +66,6 @@ def fetch_policy_text(url: str) -> str:
         downloaded = trafilatura.fetch_url(url) # trafilatura uses its own user-agent by default, we can rely on its robustness or pass config
         if not downloaded:
              # Try forcing requests logic if trafilatura default fails
-             import requests
              response = requests.get(url, headers=headers, timeout=10)
              if response.status_code == 200:
                  downloaded = response.text
@@ -104,7 +112,7 @@ async def analyze_policy(url: str, text: Optional[str] = None) -> PolicyAnalysis
                 verdict="Error"
             )
 
-        client = AsyncInferenceClient(token=api_key)
+        client = get_hf_client(api_key)
 
         models_to_try = [
             "meta-llama/Llama-3.3-70B-Instruct",
