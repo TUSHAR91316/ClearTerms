@@ -6,7 +6,9 @@ import json
 import asyncio
 import trafilatura
 import requests
+import httpx
 from dotenv import load_dotenv
+from backend.cache import analysis_cache, get_cache_key
 
 load_dotenv()
 
@@ -44,36 +46,33 @@ def get_hf_client(api_key: str) -> AsyncInferenceClient:
 
 # --- Tools ---
 
-def fetch_policy_text(url: str) -> str:
+async def fetch_policy_text(url: str) -> str:
     """
-    Downloads and extracts text. Tries JReader first, then falls back to direct fetch.
+    Downloads and extracts text. Tries Jina Reader first, then falls back to direct fetch via httpx.
     """
     headers = {
         "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
     }
 
-    # Strategy 1: Jina Reader (good for JS-heavy sites)
+    # Strategy 1: Jina Reader via Async HTTPX
     try:
         jina_url = f"https://r.jina.ai/{url}"
-        downloaded = trafilatura.fetch_url(jina_url)
-        if downloaded and len(downloaded) > 200 and "Access Denied" not in downloaded:
-            return downloaded[:50000]
+        async with httpx.AsyncClient(timeout=10.0, headers=headers) as client:
+            response = await client.get(jina_url)
+            if response.status_code == 200 and len(response.text) > 200 and "Access Denied" not in response.text:
+                return response.text[:50000]
     except Exception:
         pass
 
-    # Strategy 2: Direct Trafilatura Fetch with Headers
+    # Strategy 2: Direct Fetch via httpx & Extract via Trafilatura
     try:
-        downloaded = trafilatura.fetch_url(url) # trafilatura uses its own user-agent by default, we can rely on its robustness or pass config
-        if not downloaded:
-             # Try forcing requests logic if trafilatura default fails
-             response = requests.get(url, headers=headers, timeout=10)
-             if response.status_code == 200:
-                 downloaded = response.text
-
-        if downloaded:
-            extracted = trafilatura.extract(downloaded)
-            if extracted:
-                return extracted[:50000]
+        async with httpx.AsyncClient(timeout=10.0, headers=headers, follow_redirects=True) as client:
+            response = await client.get(url)
+            if response.status_code == 200:
+                # CPU-bound text extraction from HTML content
+                extracted = trafilatura.extract(response.text)
+                if extracted:
+                    return extracted[:50000]
     except Exception:
         pass
     
@@ -84,10 +83,17 @@ async def analyze_policy(url: str, text: Optional[str] = None) -> PolicyAnalysis
     Analyzes policy. If 'text' is provided, it uses that. 
     Otherwise it attempts to fetch from 'url'.
     """
+    # Check cache first
+    cache_key = get_cache_key(url, text)
+    cached_result = analysis_cache.get(cache_key)
+    if cached_result:
+        print(f"Cache Hit for: {url or 'Pasted Text'}")
+        return cached_result
+
     policy_text = text
     
     if not policy_text and url:
-        policy_text = await asyncio.to_thread(fetch_policy_text, url)
+        policy_text = await fetch_policy_text(url)
     
     if not policy_text:
          # Return a dummy error analysis if fetch fails and no text provided
@@ -141,7 +147,8 @@ async def analyze_policy(url: str, text: Optional[str] = None) -> PolicyAnalysis
                     model=model,
                     messages=[{"role": "user", "content": prompt}],
                     max_tokens=1000,
-                    response_format={"type": "json_object"}
+                    response_format={"type": "json_object"},
+                    timeout=15.0
                 )
                 
                 content = completion.choices[0].message.content.strip()
@@ -155,6 +162,8 @@ async def analyze_policy(url: str, text: Optional[str] = None) -> PolicyAnalysis
                 
                 # Parse to Pydantic
                 parsed = PolicyAnalysis.model_validate_json(content)
+                # Store in cache
+                analysis_cache.set(cache_key, parsed)
                 return parsed
 
             except Exception as e:

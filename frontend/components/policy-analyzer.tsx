@@ -4,7 +4,7 @@ import { useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { analyzePolicy, PolicyAnalysis } from "@/lib/api";
 import { cn } from "@/lib/utils";
-import { AlertTriangle, FileText, Search, Loader2 } from "lucide-react";
+import { AlertTriangle, FileText, Search, Loader2, Download } from "lucide-react";
 
 export function PolicyAnalyzer() {
   const [mode, setMode] = useState<"url" | "text">("url");
@@ -37,6 +37,70 @@ export function PolicyAnalyzer() {
     } finally {
       setLoading(false);
     }
+  };
+
+  const handleExportMarkdown = () => {
+    if (!result) return;
+    
+    const source = mode === "url" ? url : "Pasted policy text";
+    const dateStr = new Date().toLocaleDateString("en-US", {
+      year: "numeric",
+      month: "long",
+      day: "numeric",
+    });
+
+    const mdContent = `# ClearTerms Policy Analysis Report
+
+**Analysis Date:** ${dateStr}
+**Source Analyzed:** ${source}
+**Verdict:** ${result.verdict}
+**Transparency Score:** ${result.transparency_score}/100
+
+---
+
+## 1. Executive Summary
+${result.summary}
+
+---
+
+## 2. Red Flags & Identified Risks
+${
+  result.risk_flags.length === 0
+    ? "*No significant predatory clauses or red flags were identified in this policy.*"
+    : result.risk_flags
+        .map(
+          (risk, idx) =>
+            `### ${idx + 1}. [${risk.severity}] ${risk.category}\n* ${risk.description}`
+        )
+        .join("\n\n")
+}
+
+---
+
+## 3. User Rights & Exercisability
+${
+  result.user_rights.length === 0
+    ? "*No explicit statements regarding data subject rights or exercisability methods were identified.*"
+    : result.user_rights
+        .map(
+          (right, idx) =>
+            `### ${idx + 1}. ${right.right}\n* **Details:** ${right.details}`
+        )
+        .join("\n\n")
+}
+
+---
+*Report compiled automatically by the ClearTerms Legal Expert AI Engine. This analysis is for educational purposes only and does not constitute formal legal advice.*
+`;
+
+    const blob = new Blob([mdContent], { type: "text/markdown;charset=utf-8;" });
+    const downloadUrl = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = downloadUrl;
+    link.setAttribute("download", `ClearTerms_Analysis_Report_${new Date().toISOString().split("T")[0]}.md`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
   };
 
   return (
@@ -151,27 +215,75 @@ export function PolicyAnalyzer() {
             {/* Score & Verdict */}
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
               <div className="glass-card p-6 flex flex-col items-center justify-center text-center col-span-1">
-                <div className="text-gray-400 text-sm font-medium uppercase tracking-wider mb-2">
+                <div className="text-gray-400 text-sm font-medium uppercase tracking-wider mb-4">
                   Transparency Score
                 </div>
-                <div
-                  className={cn(
-                    "text-6xl font-bold mb-2",
+                <div className="relative w-32 h-32 flex items-center justify-center mb-3">
+                  {/* Outer glow matching the reference perfectly */}
+                  <div className={cn(
+                    "absolute inset-2 rounded-full blur-xl opacity-20 transition duration-500",
                     result.transparency_score > 80
-                      ? "text-green-400"
+                      ? "bg-green-500"
                       : result.transparency_score > 50
-                        ? "text-yellow-400"
-                        : "text-red-400",
-                  )}
-                >
-                  {result.transparency_score}
+                        ? "bg-yellow-500"
+                        : "bg-red-500"
+                  )}></div>
+
+                  <svg className="w-full h-full transform -rotate-90">
+                    {/* Background Track Circle */}
+                    <circle
+                      cx="64"
+                      cy="64"
+                      r="38"
+                      className="stroke-white/10"
+                      strokeWidth="6"
+                      fill="transparent"
+                    />
+                    {/* Foreground Animated Score Circle */}
+                    <motion.circle
+                      cx="64"
+                      cy="64"
+                      r="38"
+                      className={cn(
+                        "transition-all duration-1000 ease-out",
+                        result.transparency_score > 80
+                          ? "stroke-green-400"
+                          : result.transparency_score > 50
+                            ? "stroke-yellow-400"
+                            : "stroke-red-400"
+                      )}
+                      strokeWidth="6"
+                      fill="transparent"
+                      strokeDasharray={2 * Math.PI * 38}
+                      initial={{ strokeDashoffset: 2 * Math.PI * 38 }}
+                      animate={{ strokeDashoffset: (2 * Math.PI * 38) - (result.transparency_score / 100) * (2 * Math.PI * 38) }}
+                      transition={{ duration: 1.2, ease: "easeOut" }}
+                      strokeLinecap="round"
+                    />
+                  </svg>
+                  <div className="absolute flex flex-col items-center justify-center">
+                    <span className="text-3xl font-extrabold text-white tracking-tight">
+                      {result.transparency_score}
+                    </span>
+                    <span className="text-[10px] text-gray-500 font-semibold uppercase tracking-wider mt-0.5">
+                      / 100
+                    </span>
+                  </div>
                 </div>
-                <div className="text-sm text-gray-400">out of 100</div>
               </div>
 
-              <div className="glass-card p-6 col-span-2 flex flex-col justify-center">
-                <div className="text-gray-400 text-sm font-medium uppercase tracking-wider mb-2">
-                  Verdict & Summary
+              <div className="glass-card p-6 col-span-2 flex flex-col justify-center relative">
+                <div className="flex justify-between items-start mb-2">
+                  <div className="text-gray-400 text-sm font-medium uppercase tracking-wider">
+                    Verdict & Summary
+                  </div>
+                  <button
+                    onClick={handleExportMarkdown}
+                    className="flex items-center text-xs bg-white/5 hover:bg-white/10 border border-white/5 text-gray-300 hover:text-white px-3 py-1.5 rounded-lg font-semibold transition-all duration-300"
+                  >
+                    <Download className="w-3.5 h-3.5 mr-1.5" />
+                    Export Report
+                  </button>
                 </div>
                 <h3
                   className={cn(

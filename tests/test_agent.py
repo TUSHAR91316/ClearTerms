@@ -30,13 +30,11 @@ class TestPolicyAgent(unittest.IsolatedAsyncioTestCase):
     def tearDown(self):
         self.env_patcher.stop()
 
-    @patch("backend.agent.trafilatura.fetch_url")
-    @patch("backend.agent.trafilatura.extract")
+    @patch("backend.agent.fetch_policy_text", new_callable=AsyncMock)
     @patch("backend.agent.get_hf_client")
-    async def test_analyze_policy_success(self, mock_get_client, mock_extract, mock_fetch):
+    async def test_analyze_policy_success(self, mock_get_client, mock_fetch_policy):
         # Setup Mocks
-        mock_fetch.return_value = "<html>Content</html>"
-        mock_extract.return_value = "This is a privacy policy."
+        mock_fetch_policy.return_value = "This is a privacy policy."
         
         # Mock client and its async chat_completion method
         mock_client = MagicMock()
@@ -56,12 +54,12 @@ class TestPolicyAgent(unittest.IsolatedAsyncioTestCase):
         # Verify
         self.assertEqual(result.transparency_score, 85)
         self.assertEqual(result.verdict, "Safe")
-        mock_fetch.assert_called_with("http://example.com")
+        mock_fetch_policy.assert_called_with("http://example.com")
         mock_chat_completion.assert_called_once()
 
-    @patch("backend.agent.trafilatura.fetch_url")
-    async def test_analyze_policy_fetch_fail(self, mock_fetch):
-        mock_fetch.return_value = None # Simulate fail
+    @patch("backend.agent.fetch_policy_text", new_callable=AsyncMock)
+    async def test_analyze_policy_fetch_fail(self, mock_fetch_policy):
+        mock_fetch_policy.return_value = "" # Simulate fail
         
         result = await analyze_policy("http://bad-url.com")
         
