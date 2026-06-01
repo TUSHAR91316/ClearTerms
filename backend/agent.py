@@ -36,11 +36,14 @@ _client: Optional[AsyncInferenceClient] = None
 
 def get_hf_client(api_key: str) -> AsyncInferenceClient:
     """
-    Returns a cached global AsyncInferenceClient instance.
+    Returns a cached global AsyncInferenceClient instance with a custom 15s timeout.
     """
     global _client
     if _client is None:
-        _client = AsyncInferenceClient(token=api_key)
+        _client = AsyncInferenceClient(
+            token=api_key,
+            client=httpx.AsyncClient(timeout=15.0)
+        )
     return _client
 
 
@@ -147,8 +150,7 @@ async def analyze_policy(url: str, text: Optional[str] = None) -> PolicyAnalysis
                     model=model,
                     messages=[{"role": "user", "content": prompt}],
                     max_tokens=1000,
-                    response_format={"type": "json_object"},
-                    timeout=15.0
+                    response_format={"type": "json_object"}
                 )
                 
                 content = completion.choices[0].message.content.strip()
