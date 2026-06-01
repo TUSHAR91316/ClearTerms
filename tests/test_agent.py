@@ -6,13 +6,7 @@ import os
 # Ensure backend can be imported
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
-# Mock openai and trafilatura if not installed
-try:
-    import openai
-except ImportError:
-    sys.modules["openai"] = MagicMock()
-    sys.modules["openai"].AsyncOpenAI = MagicMock()
-
+# Ensure trafilatura mock if not installed
 try:
     import trafilatura
 except ImportError:

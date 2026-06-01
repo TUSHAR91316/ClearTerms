@@ -3,9 +3,7 @@ from typing import List, Optional
 from pydantic import BaseModel, Field
 from huggingface_hub import AsyncInferenceClient
 import json
-import asyncio
 import trafilatura
-import requests
 import httpx
 from dotenv import load_dotenv
 from backend.cache import analysis_cache, get_cache_key
@@ -42,7 +40,7 @@ def get_hf_client(api_key: str) -> AsyncInferenceClient:
     if _client is None:
         _client = AsyncInferenceClient(
             token=api_key,
-            client=httpx.AsyncClient(timeout=15.0)
+            timeout=15.0
         )
     return _client
 
