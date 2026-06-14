@@ -1,5 +1,6 @@
 import { ShieldCheck } from "lucide-react";
 import { PolicyAnalyzer } from "@/components/policy-analyzer";
+import Image from "next/image";
 
 export default function Home() {
   return (
@@ -14,10 +15,12 @@ export default function Home() {
         {/* Header */}
         <div className="text-center space-y-4">
           <div className="inline-flex items-center justify-center p-2 pr-4 bg-white/5 rounded-full mb-6 border border-white/10 backdrop-blur-md shadow-lg shadow-blue-500/10">
-            <img
+            <Image
               src="/logo.png"
               alt="ClearTerms Logo"
-              className="w-8 h-8 mr-3 rounded-full"
+              width={32}
+              height={32}
+              className="mr-3 rounded-full"
             />
             <span className="text-sm md:text-base font-semibold text-gray-200 tracking-wide uppercase">
               ClearTerms AI Agent

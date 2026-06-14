@@ -108,8 +108,10 @@ ${
       {/* Input Section */}
       <div className="w-full max-w-2xl mx-auto flex flex-col items-center space-y-5">
         {/* Tabs Container */}
-        <div className="flex bg-[#161618] p-1.5 rounded-[1.25rem] border border-white/5 w-fit shadow-2xl z-10">
+        <div className="flex bg-[#161618] p-1.5 rounded-[1.25rem] border border-white/5 w-fit shadow-2xl z-10" role="tablist" aria-label="Input mode selection">
           <button
+            role="tab"
+            aria-selected={mode === "url"}
             onClick={() => setMode("url")}
             className={cn(
               "px-6 py-2.5 rounded-[1rem] text-sm font-semibold transition-all duration-300",
@@ -121,6 +123,8 @@ ${
             Analyze URL
           </button>
           <button
+            role="tab"
+            aria-selected={mode === "text"}
             onClick={() => setMode("text")}
             className={cn(
               "px-6 py-2.5 rounded-[1rem] text-sm font-semibold transition-all duration-300",
@@ -142,6 +146,8 @@ ${
             {mode === "url" ? (
               <div className="relative flex items-center bg-[#19152b] rounded-[1.25rem] border border-white/5 p-1.5 shadow-2xl transition-all duration-300">
                 <input
+                  id="url-input"
+                  aria-label="Privacy Policy URL"
                   type="url"
                   placeholder="https://example.com/privacy-policy"
                   value={url}
@@ -152,6 +158,7 @@ ${
                 <button
                   type="submit"
                   disabled={loading}
+                  aria-label="Analyze URL"
                   className="bg-white/5 hover:bg-white/10 border border-white/5 text-white w-12 h-12 rounded-xl flex items-center justify-center transition-all duration-300 disabled:opacity-50 flex-shrink-0 mr-1"
                 >
                   {loading ? (
@@ -164,6 +171,8 @@ ${
             ) : (
               <div className="relative flex flex-col bg-[#19152b] rounded-[1.25rem] border border-white/5 p-2 shadow-2xl transition-all duration-300">
                 <textarea
+                  id="text-input"
+                  aria-label="Privacy Policy Text"
                   placeholder="Paste the policy text here..."
                   value={text}
                   onChange={(e) => setText(e.target.value)}
