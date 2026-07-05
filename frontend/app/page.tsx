@@ -1,4 +1,3 @@
-import { ShieldCheck } from "lucide-react";
 import { PolicyAnalyzer } from "@/components/policy-analyzer";
 import Image from "next/image";
 

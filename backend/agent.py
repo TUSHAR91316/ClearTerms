@@ -3,6 +3,7 @@ from typing import List, Optional
 from pydantic import BaseModel, Field
 from huggingface_hub import AsyncInferenceClient
 import json
+import re
 import trafilatura
 import httpx
 from dotenv import load_dotenv
@@ -62,8 +63,8 @@ async def fetch_policy_text(url: str) -> str:
             response = await client.get(jina_url)
             if response.status_code == 200 and len(response.text) > 200 and "Access Denied" not in response.text:
                 return response.text[:50000]
-    except Exception:
-        pass
+    except Exception as e:
+        print(f"Jina extraction failed: {e}")
 
     # Strategy 2: Direct Fetch via httpx & Extract via Trafilatura
     try:
@@ -74,8 +75,8 @@ async def fetch_policy_text(url: str) -> str:
                 extracted = trafilatura.extract(response.text)
                 if extracted:
                     return extracted[:50000]
-    except Exception:
-        pass
+    except Exception as e:
+        print(f"Direct extraction failed: {e}")
     
     return ""
 
@@ -154,10 +155,8 @@ async def analyze_policy(url: str, text: Optional[str] = None) -> PolicyAnalysis
                 content = completion.choices[0].message.content.strip()
                 
                 # Clean up markdown JSON block if present
-                if content.startswith("```json"):
-                    content = content[7:]
-                if content.endswith("```"):
-                    content = content[:-3]
+                content = re.sub(r'^```(?:json)?\s*', '', content)
+                content = re.sub(r'\s*```$', '', content)
                 content = content.strip()
                 
                 # Parse to Pydantic

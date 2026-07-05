@@ -24,7 +24,7 @@ export function PolicyAnalyzer() {
     setResult(null);
 
     try {
-      const targetUrl = mode === "url" ? url : "";
+      const targetUrl = mode === "url" ? url : null;
       const targetText = mode === "text" ? text : undefined;
 
       const data = await analyzePolicy(targetUrl, targetText);
@@ -101,6 +101,7 @@ ${
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
+    URL.revokeObjectURL(downloadUrl);
   };
 
   return (
