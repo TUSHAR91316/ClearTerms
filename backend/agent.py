@@ -1,4 +1,5 @@
 import os
+import asyncio
 from typing import List, Optional
 from pydantic import BaseModel, Field
 from huggingface_hub import AsyncInferenceClient
@@ -32,6 +33,16 @@ class PolicyAnalysis(BaseModel):
 # --- Agent Setup ---
 
 _client: Optional[AsyncInferenceClient] = None
+_http_client: Optional[httpx.AsyncClient] = None
+
+def get_http_client() -> httpx.AsyncClient:
+    global _http_client
+    if _http_client is None:
+        headers = {
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+        }
+        _http_client = httpx.AsyncClient(timeout=10.0, headers=headers, follow_redirects=True)
+    return _http_client
 
 def get_hf_client(api_key: str) -> AsyncInferenceClient:
     """
@@ -48,36 +59,49 @@ def get_hf_client(api_key: str) -> AsyncInferenceClient:
 
 # --- Tools ---
 
-async def fetch_policy_text(url: str) -> str:
-    """
-    Downloads and extracts text. Tries Jina Reader first, then falls back to direct fetch via httpx.
-    """
-    headers = {
-        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
-    }
-
-    # Strategy 1: Jina Reader via Async HTTPX
+async def fetch_jina(url: str, client: httpx.AsyncClient) -> str:
     try:
         jina_url = f"https://r.jina.ai/{url}"
-        async with httpx.AsyncClient(timeout=10.0, headers=headers) as client:
-            response = await client.get(jina_url)
-            if response.status_code == 200 and len(response.text) > 200 and "Access Denied" not in response.text:
-                return response.text[:50000]
+        response = await client.get(jina_url)
+        if response.status_code == 200 and len(response.text) > 200 and "Access Denied" not in response.text:
+            return response.text[:50000]
     except Exception as e:
         print(f"Jina extraction failed: {e}")
+    return ""
 
-    # Strategy 2: Direct Fetch via httpx & Extract via Trafilatura
+async def fetch_trafilatura(url: str, client: httpx.AsyncClient) -> str:
     try:
-        async with httpx.AsyncClient(timeout=10.0, headers=headers, follow_redirects=True) as client:
-            response = await client.get(url)
-            if response.status_code == 200:
-                # CPU-bound text extraction from HTML content
-                extracted = trafilatura.extract(response.text)
-                if extracted:
-                    return extracted[:50000]
+        response = await client.get(url)
+        if response.status_code == 200:
+            extracted = trafilatura.extract(response.text)
+            if extracted:
+                return extracted[:50000]
     except Exception as e:
         print(f"Direct extraction failed: {e}")
+    return ""
+
+async def fetch_policy_text(url: str) -> str:
+    """
+    Downloads and extracts text concurrently using Jina Reader and Trafilatura.
+    Returns the first successful result to minimize latency.
+    """
+    client = get_http_client()
     
+    jina_task = asyncio.create_task(fetch_jina(url, client))
+    direct_task = asyncio.create_task(fetch_trafilatura(url, client))
+    
+    pending = {jina_task, direct_task}
+    
+    while pending:
+        done, pending = await asyncio.wait(pending, return_when=asyncio.FIRST_COMPLETED)
+        for task in done:
+            result = task.result()
+            if result:
+                # Cancel remaining tasks if we found a valid result
+                for p in pending:
+                    p.cancel()
+                return result
+                
     return ""
 
 async def analyze_policy(url: str, text: Optional[str] = None) -> PolicyAnalysis:
