@@ -1,13 +1,60 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { analyzePolicy, PolicyAnalysis } from "@/lib/api";
 import { cn } from "@/lib/utils";
-import { AlertTriangle, FileText, Search, Loader2, Download } from "lucide-react";
+import { AlertTriangle, FileText, Search, Loader2, Download, History, Clock } from "lucide-react";
+
+export interface HistoryItem {
+  id: string;
+  source: string;
+  date: string;
+  transparency_score: number;
+  verdict: string;
+  data: PolicyAnalysis;
+}
 
 export function PolicyAnalyzer() {
-  const [mode, setMode] = useState<"url" | "text">("url");
+  const [mode, setMode] = useState<"url" | "text" | "history">("url");
+  const [history, setHistory] = useState<HistoryItem[]>([]);
+
+  useEffect(() => {
+    const saved = localStorage.getItem("clearterms_history");
+    if (saved) {
+      try {
+        setHistory(JSON.parse(saved));
+      } catch (e) { }
+    }
+  }, []);
+
+  const saveToHistory = (source: string, data: PolicyAnalysis) => {
+    const newItem: HistoryItem = {
+      id: Date.now().toString(),
+      source,
+      date: new Date().toISOString(),
+      transparency_score: data.transparency_score,
+      verdict: data.verdict,
+      data
+    };
+    setHistory((prev) => {
+      const updated = [newItem, ...prev].slice(0, 20); // Keep last 20
+      localStorage.setItem("clearterms_history", JSON.stringify(updated));
+      return updated;
+    });
+  };
+
+  const loadFromHistory = (item: HistoryItem) => {
+    setResult(item.data);
+    setError("");
+    if (item.source.startsWith("http")) {
+       setUrl(item.source);
+       setMode("url");
+    } else {
+       setText(item.source);
+       setMode("text");
+    }
+  };
   const [url, setUrl] = useState("");
   const [text, setText] = useState("");
   const [loading, setLoading] = useState(false);
@@ -29,6 +76,7 @@ export function PolicyAnalyzer() {
 
       const data = await analyzePolicy(targetUrl, targetText);
       setResult(data);
+      saveToHistory(targetUrl || targetText || "Unknown", data);
     } catch (err: any) {
       setError(
         err?.response?.data?.detail ||
@@ -136,8 +184,23 @@ ${
           >
             Paste Text
           </button>
+          <button
+            role="tab"
+            aria-selected={mode === "history"}
+            onClick={() => { setMode("history"); setResult(null); setError(""); }}
+            className={cn(
+              "px-6 py-2.5 rounded-[1rem] text-sm font-semibold transition-all duration-300 flex items-center",
+              mode === "history"
+                ? "bg-[#3B82F6] text-white shadow-md block"
+                : "text-gray-400 hover:text-gray-200 bg-transparent",
+            )}
+          >
+            <History className="w-4 h-4 mr-2" />
+            History
+          </button>
         </div>
 
+        {mode !== "history" ? (
         <form onSubmit={handleAnalyze} className="relative w-full z-10 mt-6">
           {/* Input Container with Custom Glow and Background */}
           <div className="relative group w-full">
@@ -198,6 +261,40 @@ ${
             )}
           </div>
         </form>
+        ) : (
+          <div className="w-full z-10 mt-6 space-y-4">
+            {history.length === 0 ? (
+              <div className="glass-card p-8 text-center text-gray-400 italic">
+                <Clock className="w-12 h-12 mx-auto mb-4 opacity-50" />
+                No analysis history yet. Analyze a URL or text to save it here.
+              </div>
+            ) : (
+              history.map((item) => (
+                <div 
+                  key={item.id} 
+                  onClick={() => loadFromHistory(item)}
+                  className="glass-card p-4 hover:bg-white/10 cursor-pointer transition-all flex items-center justify-between group"
+                >
+                  <div className="flex flex-col overflow-hidden mr-4">
+                    <span className="text-white font-semibold truncate w-full max-w-sm">{item.source}</span>
+                    <span className="text-xs text-gray-500 mt-1">{new Date(item.date).toLocaleString()}</span>
+                  </div>
+                  <div className="flex items-center space-x-3">
+                    <span className={cn(
+                      "text-xs font-bold px-2 py-1 rounded-lg uppercase tracking-wide",
+                      item.verdict === "Safe" ? "bg-green-500/20 text-green-400" :
+                      item.verdict === "Caution" ? "bg-yellow-500/20 text-yellow-400" :
+                      "bg-red-500/20 text-red-400"
+                    )}>{item.verdict}</span>
+                    <div className="w-10 h-10 rounded-full flex items-center justify-center font-bold text-sm bg-white/5 border border-white/10 group-hover:bg-[#3B82F6] group-hover:text-white group-hover:border-transparent transition-all">
+                      {item.transparency_score}
+                    </div>
+                  </div>
+                </div>
+              ))
+            )}
+          </div>
+        )}
       </div>
 
       {/* Error State */}
