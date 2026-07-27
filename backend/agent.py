@@ -30,6 +30,15 @@ class PolicyAnalysis(BaseModel):
     user_rights: List[UserRight] = Field(description="List of rights the user has.")
     verdict: str = Field(description="Overall verdict: 'Safe', 'Caution', or 'Unsafe'.")
 
+class PolicyComparison(BaseModel):
+    policy_a_score: int = Field(description="Transparency score for Policy A from 0-100.")
+    policy_b_score: int = Field(description="Transparency score for Policy B from 0-100.")
+    winner: str = Field(description="Which policy is more user-friendly: 'Policy A', 'Policy B', or 'Tie'.")
+    summary: str = Field(description="A concise comparative summary highlighting the key differences between both policies.")
+    key_differences: List[str] = Field(description="Bullet points comparing predatory terms, data collection, or user rights differences.")
+    policy_a_verdict: str = Field(description="Verdict for Policy A: 'Safe', 'Caution', or 'Unsafe'.")
+    policy_b_verdict: str = Field(description="Verdict for Policy B: 'Safe', 'Caution', or 'Unsafe'.")
+
 # --- Agent Setup ---
 
 _client: Optional[AsyncInferenceClient] = None
@@ -158,7 +167,8 @@ async def analyze_policy(url: str, text: Optional[str] = None) -> PolicyAnalysis
             "You are a legal expert and privacy advocate. Your goal is to analyze "
             "Terms of Service and Privacy Policies to protect the user."
             "Identify predatory clauses, data selling, and vague language."
-            "Be critical but fair.\n\n"
+            "Be critical but fair. If the policy is written in a non-English language, "
+            "translate your findings and summary into plain English.\n\n"
             "Analyze the following policy text: \n\n"
             f"{policy_text}\n\n"
             "Respond in strictly valid JSON format matching this schema:\n"
@@ -210,3 +220,98 @@ async def analyze_policy(url: str, text: Optional[str] = None) -> PolicyAnalysis
             user_rights=[],
             verdict="Error"
         )
+
+
+async def compare_policies(
+    url_a: Optional[str] = None,
+    text_a: Optional[str] = None,
+    url_b: Optional[str] = None,
+    text_b: Optional[str] = None
+) -> PolicyComparison:
+    """
+    Fetches and analyzes two policies concurrently, then performs an AI-powered comparative analysis.
+    """
+    # Fetch both policy texts concurrently
+    policy_a_text, policy_b_text = await asyncio.gather(
+        analyze_policy(url_a or "", text_a) if (url_a or text_a) else asyncio.sleep(0, result=None),
+        analyze_policy(url_b or "", text_b) if (url_b or text_b) else asyncio.sleep(0, result=None)
+    )
+
+    analysis_a: PolicyAnalysis = policy_a_text
+    analysis_b: PolicyAnalysis = policy_b_text
+
+    if not analysis_a or not analysis_b or analysis_a.verdict == "Error" or analysis_b.verdict == "Error":
+        return PolicyComparison(
+            policy_a_score=analysis_a.transparency_score if analysis_a else 0,
+            policy_b_score=analysis_b.transparency_score if analysis_b else 0,
+            winner="Error",
+            summary="Could not complete comparative analysis because one or both policy analyses failed.",
+            key_differences=["One or both policy inputs were invalid or could not be retrieved."],
+            policy_a_verdict=analysis_a.verdict if analysis_a else "Error",
+            policy_b_verdict=analysis_b.verdict if analysis_b else "Error"
+        )
+
+    # Perform comparison via LLM prompt
+    api_key = os.getenv("HF_TOKEN")
+    if not api_key:
+        # Fallback comparison if no key
+        winner = "Policy A" if analysis_a.transparency_score > analysis_b.transparency_score else ("Policy B" if analysis_b.transparency_score > analysis_a.transparency_score else "Tie")
+        return PolicyComparison(
+            policy_a_score=analysis_a.transparency_score,
+            policy_b_score=analysis_b.transparency_score,
+            winner=winner,
+            summary=f"Policy A scored {analysis_a.transparency_score}/100 while Policy B scored {analysis_b.transparency_score}/100.",
+            key_differences=[
+                f"Policy A Summary: {analysis_a.summary}",
+                f"Policy B Summary: {analysis_b.summary}"
+            ],
+            policy_a_verdict=analysis_a.verdict,
+            policy_b_verdict=analysis_b.verdict
+        )
+
+    client = get_hf_client(api_key)
+    models_to_try = [
+        "meta-llama/Llama-3.3-70B-Instruct",
+        "Qwen/Qwen2.5-72B-Instruct",
+        "mistralai/Mixtral-8x7B-Instruct-v0.1"
+    ]
+
+    prompt = (
+        "You are a legal expert comparing two privacy policies.\n\n"
+        f"POLICY A ANALYSIS:\nScore: {analysis_a.transparency_score}/100\nVerdict: {analysis_a.verdict}\nSummary: {analysis_a.summary}\n\n"
+        f"POLICY B ANALYSIS:\nScore: {analysis_b.transparency_score}/100\nVerdict: {analysis_b.verdict}\nSummary: {analysis_b.summary}\n\n"
+        "Compare both policies. Which one is safer/more transparent? What are the key differences?\n"
+        "Respond in strictly valid JSON format matching this schema:\n"
+        f"{json.dumps(PolicyComparison.model_json_schema())}\n"
+        "Do not output anything other than JSON."
+    )
+
+    for model in models_to_try:
+        try:
+            completion = await client.chat_completion(
+                model=model,
+                messages=[{"role": "user", "content": prompt}],
+                max_tokens=1000,
+                response_format={"type": "json_object"}
+            )
+            content = completion.choices[0].message.content.strip()
+            content = re.sub(r'^```(?:json)?\s*', '', content)
+            content = re.sub(r'\s*```$', '', content).strip()
+            return PolicyComparison.model_validate_json(content)
+        except Exception as e:
+            print(f"Compare model {model} failed: {e}")
+            continue
+
+    winner = "Policy A" if analysis_a.transparency_score > analysis_b.transparency_score else ("Policy B" if analysis_b.transparency_score > analysis_a.transparency_score else "Tie")
+    return PolicyComparison(
+        policy_a_score=analysis_a.transparency_score,
+        policy_b_score=analysis_b.transparency_score,
+        winner=winner,
+        summary=f"Policy A scored {analysis_a.transparency_score}/100 ({analysis_a.verdict}) and Policy B scored {analysis_b.transparency_score}/100 ({analysis_b.verdict}).",
+        key_differences=[
+            f"Policy A: {analysis_a.summary}",
+            f"Policy B: {analysis_b.summary}"
+        ],
+        policy_a_verdict=analysis_a.verdict,
+        policy_b_verdict=analysis_b.verdict
+    )

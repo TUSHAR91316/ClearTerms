@@ -2,14 +2,16 @@ import '@testing-library/jest-dom';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { PolicyAnalyzer } from '@/components/policy-analyzer';
-import { analyzePolicy } from '@/lib/api';
+import { analyzePolicy, comparePolicies } from '@/lib/api';
 
 // Mock the API module
 jest.mock('@/lib/api', () => ({
   analyzePolicy: jest.fn(),
+  comparePolicies: jest.fn(),
 }));
 
 const mockAnalyzePolicy = analyzePolicy as jest.Mock;
+const mockComparePolicies = comparePolicies as jest.Mock;
 
 describe('PolicyAnalyzer Component', () => {
   beforeEach(() => {
@@ -24,10 +26,22 @@ describe('PolicyAnalyzer Component', () => {
     // Check tabs
     expect(screen.getByRole('tab', { name: /Analyze URL/i })).toHaveAttribute('aria-selected', 'true');
     expect(screen.getByRole('tab', { name: /Paste Text/i })).toHaveAttribute('aria-selected', 'false');
+    expect(screen.getByRole('tab', { name: /Compare/i })).toHaveAttribute('aria-selected', 'false');
     expect(screen.getByRole('tab', { name: /History/i })).toHaveAttribute('aria-selected', 'false');
     
     // Check input presence
     expect(screen.getByRole('textbox', { name: /Privacy Policy URL/i })).toBeInTheDocument();
+  });
+
+  it('switches to Compare tab when clicked', async () => {
+    render(<PolicyAnalyzer />);
+    const compareTab = screen.getByRole('tab', { name: /Compare/i });
+    
+    await userEvent.click(compareTab);
+    
+    expect(compareTab).toHaveAttribute('aria-selected', 'true');
+    expect(screen.getByPlaceholderText(/Policy A URL/i)).toBeInTheDocument();
+    expect(screen.getByPlaceholderText(/Policy B URL/i)).toBeInTheDocument();
   });
 
   it('switches to Text tab when clicked', async () => {

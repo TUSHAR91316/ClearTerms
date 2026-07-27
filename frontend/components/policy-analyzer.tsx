@@ -2,9 +2,9 @@
 
 import { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { analyzePolicy, PolicyAnalysis } from "@/lib/api";
+import { analyzePolicy, comparePolicies, PolicyAnalysis, PolicyComparison } from "@/lib/api";
 import { cn } from "@/lib/utils";
-import { AlertTriangle, FileText, Search, Loader2, Download, History, Clock } from "lucide-react";
+import { AlertTriangle, FileText, Search, Loader2, Download, History, Clock, GitCompare, FileJson, Printer, CheckCircle2 } from "lucide-react";
 
 export interface HistoryItem {
   id: string;
@@ -16,7 +16,10 @@ export interface HistoryItem {
 }
 
 export function PolicyAnalyzer() {
-  const [mode, setMode] = useState<"url" | "text" | "history">("url");
+  const [mode, setMode] = useState<"url" | "text" | "compare" | "history">("url");
+  const [urlA, setUrlA] = useState("");
+  const [urlB, setUrlB] = useState("");
+  const [compareResult, setCompareResult] = useState<PolicyComparison | null>(null);
   const [history, setHistory] = useState<HistoryItem[]>([]);
 
   useEffect(() => {
@@ -85,6 +88,42 @@ export function PolicyAnalyzer() {
     } finally {
       setLoading(false);
     }
+  };
+
+  const handleCompare = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!urlA || !urlB) return;
+
+    setLoading(true);
+    setError("");
+    setCompareResult(null);
+
+    try {
+      const data = await comparePolicies(urlA, undefined, urlB, undefined);
+      setCompareResult(data);
+    } catch (err: any) {
+      setError(err?.response?.data?.detail || "Failed to compare policies. Please check inputs.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleExportJSON = () => {
+    const exportData = compareResult ? compareResult : result;
+    if (!exportData) return;
+    const blob = new Blob([JSON.stringify(exportData, null, 2)], { type: "application/json" });
+    const downloadUrl = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = downloadUrl;
+    link.setAttribute("download", `ClearTerms_Analysis_${Date.now()}.json`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(downloadUrl);
+  };
+
+  const handleExportPDF = () => {
+    window.print();
   };
 
   const handleExportMarkdown = () => {
@@ -186,8 +225,22 @@ ${
           </button>
           <button
             role="tab"
+            aria-selected={mode === "compare"}
+            onClick={() => { setMode("compare"); setResult(null); setCompareResult(null); setError(""); }}
+            className={cn(
+              "px-6 py-2.5 rounded-[1rem] text-sm font-semibold transition-all duration-300 flex items-center",
+              mode === "compare"
+                ? "bg-[#3B82F6] text-white shadow-md block"
+                : "text-gray-400 hover:text-gray-200 bg-transparent",
+            )}
+          >
+            <GitCompare className="w-4 h-4 mr-2" />
+            Compare
+          </button>
+          <button
+            role="tab"
             aria-selected={mode === "history"}
-            onClick={() => { setMode("history"); setResult(null); setError(""); }}
+            onClick={() => { setMode("history"); setResult(null); setCompareResult(null); setError(""); }}
             className={cn(
               "px-6 py-2.5 rounded-[1rem] text-sm font-semibold transition-all duration-300 flex items-center",
               mode === "history"
@@ -200,7 +253,46 @@ ${
           </button>
         </div>
 
-        {mode !== "history" ? (
+        {mode === "compare" ? (
+          <form onSubmit={handleCompare} className="relative w-full z-10 mt-6 space-y-4">
+            <div className="relative group w-full grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="relative flex items-center bg-[#19152b] rounded-[1.25rem] border border-white/5 p-1.5 shadow-2xl">
+                <input
+                  type="url"
+                  placeholder="Policy A URL (e.g. Terms 2023)"
+                  value={urlA}
+                  onChange={(e) => setUrlA(e.target.value)}
+                  className="w-full bg-transparent border-none outline-none text-gray-300 placeholder-gray-500 px-4 py-3 text-[14px] font-medium"
+                  required
+                />
+              </div>
+              <div className="relative flex items-center bg-[#19152b] rounded-[1.25rem] border border-white/5 p-1.5 shadow-2xl">
+                <input
+                  type="url"
+                  placeholder="Policy B URL (e.g. Terms 2024)"
+                  value={urlB}
+                  onChange={(e) => setUrlB(e.target.value)}
+                  className="w-full bg-transparent border-none outline-none text-gray-300 placeholder-gray-500 px-4 py-3 text-[14px] font-medium"
+                  required
+                />
+              </div>
+            </div>
+            <div className="flex justify-center pt-2">
+              <button
+                type="submit"
+                disabled={loading}
+                className="bg-[#3B82F6] hover:bg-blue-600 text-white px-8 py-3 rounded-xl font-semibold transition-all duration-300 disabled:opacity-50 flex items-center shadow-lg"
+              >
+                {loading ? (
+                  <Loader2 className="w-5 h-5 animate-spin mr-2" />
+                ) : (
+                  <GitCompare className="w-5 h-5 mr-2" />
+                )}
+                Compare Policies
+              </button>
+            </div>
+          </form>
+        ) : mode !== "history" ? (
         <form onSubmit={handleAnalyze} className="relative w-full z-10 mt-6">
           {/* Input Container with Custom Glow and Background */}
           <div className="relative group w-full">
@@ -384,13 +476,32 @@ ${
                   <div className="text-gray-400 text-sm font-medium uppercase tracking-wider">
                     Verdict & Summary
                   </div>
-                  <button
-                    onClick={handleExportMarkdown}
-                    className="flex items-center text-xs bg-white/5 hover:bg-white/10 border border-white/5 text-gray-300 hover:text-white px-3 py-1.5 rounded-lg font-semibold transition-all duration-300"
-                  >
-                    <Download className="w-3.5 h-3.5 mr-1.5" />
-                    Export Report
-                  </button>
+                  <div className="flex items-center space-x-2">
+                    <button
+                      onClick={handleExportMarkdown}
+                      title="Export Markdown"
+                      className="flex items-center text-xs bg-white/5 hover:bg-white/10 border border-white/5 text-gray-300 hover:text-white px-3 py-1.5 rounded-lg font-semibold transition-all duration-300"
+                    >
+                      <Download className="w-3.5 h-3.5 mr-1.5" />
+                      MD
+                    </button>
+                    <button
+                      onClick={handleExportJSON}
+                      title="Export JSON"
+                      className="flex items-center text-xs bg-white/5 hover:bg-white/10 border border-white/5 text-gray-300 hover:text-white px-3 py-1.5 rounded-lg font-semibold transition-all duration-300"
+                    >
+                      <FileJson className="w-3.5 h-3.5 mr-1.5 text-blue-400" />
+                      JSON
+                    </button>
+                    <button
+                      onClick={handleExportPDF}
+                      title="Print / Export PDF"
+                      className="flex items-center text-xs bg-white/5 hover:bg-white/10 border border-white/5 text-gray-300 hover:text-white px-3 py-1.5 rounded-lg font-semibold transition-all duration-300"
+                    >
+                      <Printer className="w-3.5 h-3.5 mr-1.5 text-green-400" />
+                      PDF
+                    </button>
+                  </div>
                 </div>
                 <h3
                   className={cn(
@@ -467,6 +578,101 @@ ${
                     </div>
                   ))
                 )}
+              </div>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Compare Results View */}
+      <AnimatePresence>
+        {compareResult && (
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="space-y-6 mt-8"
+          >
+            {/* Header & Export */}
+            <div className="flex justify-between items-center glass-card p-6">
+              <div>
+                <h3 className="text-2xl font-bold text-white flex items-center">
+                  <GitCompare className="w-6 h-6 mr-2 text-blue-400" />
+                  Policy Comparison Verdict
+                </h3>
+                <p className="text-sm text-gray-400 mt-1">
+                  Winner: <span className="font-bold text-green-400">{compareResult.winner}</span>
+                </p>
+              </div>
+              <div className="flex items-center space-x-2">
+                <button
+                  onClick={handleExportJSON}
+                  className="flex items-center text-xs bg-white/5 hover:bg-white/10 border border-white/5 text-gray-300 hover:text-white px-3 py-1.5 rounded-lg font-semibold transition-all"
+                >
+                  <FileJson className="w-3.5 h-3.5 mr-1.5 text-blue-400" />
+                  Export JSON
+                </button>
+                <button
+                  onClick={handleExportPDF}
+                  className="flex items-center text-xs bg-white/5 hover:bg-white/10 border border-white/5 text-gray-300 hover:text-white px-3 py-1.5 rounded-lg font-semibold transition-all"
+                >
+                  <Printer className="w-3.5 h-3.5 mr-1.5 text-green-400" />
+                  Print / PDF
+                </button>
+              </div>
+            </div>
+
+            {/* Side-by-Side Scores */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              {/* Policy A Card */}
+              <div className="glass-card p-6 border-t-4 border-t-blue-500">
+                <div className="text-xs font-bold uppercase tracking-wider text-gray-400 mb-1">Policy A</div>
+                <div className="flex justify-between items-center mb-4">
+                  <span className="text-4xl font-extrabold text-white">{compareResult.policy_a_score}<span className="text-xs text-gray-500 font-normal">/100</span></span>
+                  <span className={cn(
+                    "text-xs font-bold px-3 py-1 rounded-full uppercase",
+                    compareResult.policy_a_verdict === "Safe" ? "bg-green-500/20 text-green-400" :
+                    compareResult.policy_a_verdict === "Caution" ? "bg-yellow-500/20 text-yellow-400" : "bg-red-500/20 text-red-400"
+                  )}>
+                    {compareResult.policy_a_verdict}
+                  </span>
+                </div>
+              </div>
+
+              {/* Policy B Card */}
+              <div className="glass-card p-6 border-t-4 border-t-purple-500">
+                <div className="text-xs font-bold uppercase tracking-wider text-gray-400 mb-1">Policy B</div>
+                <div className="flex justify-between items-center mb-4">
+                  <span className="text-4xl font-extrabold text-white">{compareResult.policy_b_score}<span className="text-xs text-gray-500 font-normal">/100</span></span>
+                  <span className={cn(
+                    "text-xs font-bold px-3 py-1 rounded-full uppercase",
+                    compareResult.policy_b_verdict === "Safe" ? "bg-green-500/20 text-green-400" :
+                    compareResult.policy_b_verdict === "Caution" ? "bg-yellow-500/20 text-yellow-400" : "bg-red-500/20 text-red-400"
+                  )}>
+                    {compareResult.policy_b_verdict}
+                  </span>
+                </div>
+              </div>
+            </div>
+
+            {/* Summary */}
+            <div className="glass-card p-6">
+              <h4 className="text-lg font-bold text-white mb-2">Comparative Summary</h4>
+              <p className="text-gray-300 leading-relaxed">{compareResult.summary}</p>
+            </div>
+
+            {/* Key Differences */}
+            <div className="glass-card p-6">
+              <h4 className="text-lg font-bold text-white mb-4 flex items-center">
+                <CheckCircle2 className="w-5 h-5 mr-2 text-blue-400" />
+                Key Differences Breakdown
+              </h4>
+              <div className="space-y-3">
+                {compareResult.key_differences.map((diff, idx) => (
+                  <div key={idx} className="flex items-start bg-white/5 p-3.5 rounded-xl border border-white/5 text-sm text-gray-300">
+                    <span className="font-bold text-blue-400 mr-3">{idx + 1}.</span>
+                    <span>{diff}</span>
+                  </div>
+                ))}
               </div>
             </div>
           </motion.div>
